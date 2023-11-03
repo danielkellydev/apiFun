@@ -1,0 +1,108 @@
+<div class="flex">
+  <!-- Sidebar with options -->
+  <div class="w-80 p-4 bg-gray-200">
+    <%# Form the display client treatment notes %>
+    <%= form_with url: nookal_view_path, method: :get, data: { turbo_frame: "notes_frame" } do |f| %>
+      <div class="mb-4">
+        <%= f.collection_select :client_id, NookalService.fetch_clients.reverse, :clientID, :fullName, { prompt: "Select Client" }, class: "block appearance-none w-full bg-white border border-gray-400 text-gray-700 py-3 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-gray-500", id: "client_select" %>
+      </div>
+
+      <div class="mb-4">
+        <button type="button" id="add_note_btn" class="block w-full text-left bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mb-2">Add Treatment Note</button>
+      </div>
+
+      <!-- Dropdown for cases when adding a note -->
+      <div class="mb-4 case-dropdown" style="display: none;">
+        <%= f.collection_select :case_id, [], :caseID, :title, { prompt: "Select Case" }, class: "block appearance-none w-full bg-white border border-gray-400 text-gray-700 py-3 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-gray-500", id: "case_select" %>
+      </div>
+      <!-- Button to show notes for selected client -->
+      <div class="mb-4">
+        <%= f.submit "Show Notes", name: 'option', value: 'notes', class: "block w-full text-left bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mb-2" %>
+      </div>
+      <!-- Button to show other details for selected client -->
+      <div class="mb-4">
+        <%= f.submit "Client Details", name: 'option', value: 'details', class: "block w-full text-left bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" %>
+      </div>
+    <% end %>
+  </div>
+
+  <!-- Main Content Area -->
+  <div class="flex-grow p-4 min-h-screen min-w-3/4">
+    <turbo-frame id="notes_frame" class= "w-full">
+
+      <!-- New Treatment Note Form -->
+      <div class="mb-4 note-form" style="display: none;">
+        <%= form_with url: create_note_path, method: :post do |f| %>
+          <h3 class="font-bold mb-2">Add Treatment Note</h3>
+          <%# Field names are mapped via the map_field_id_to_name helper %>
+          <% fields = [[map_field_id_to_name(1), 1], [map_field_id_to_name(2), 2], [map_field_id_to_name(3), 3], [map_field_id_to_name(4), 4]] %>
+          
+          <% fields.each do |name, id| %>
+            <%= f.label :content, name, class: "block mt-4" %>
+            <%= f.text_area "content[#{id}]", class: "w-full p-2 mb-4 border rounded" %>
+          <% end %>
+
+          <%= f.submit "Add Note", class: "block w-full text-left bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mb-2" %>
+        <% end %>
+      </div>
+
+      <%# Existing notes form %>
+      <% if params[:option] == 'notes' && @notes.present? %>
+        <div class="mt-6 mb-4">
+          <h2 class="text-2xl font-bold mb-4">Treatment Notes for <%= @client_name %></h2>
+          <% @notes.sort_by { |note| note["date"] }.reverse.each do |note| %>
+            <div class="treatment-note mb-6 p-4 border rounded shadow-lg">
+              <p class="mb-4 font-semibold"><strong>Consult Date:</strong> <%= note["date"].to_time.strftime('%d/%m/%Y') %></p>
+              <% parsed_data = JSON.parse(note["answers"]) %>
+              <% parsed_data["fields"].each do |field| %>
+                <% field_name = map_field_id_to_name(field["id"].to_i) %>
+                <% if field["answers"] && field["answers"].first.present? %>
+                  <div class="mb-3">
+                    <h3 class="font-bold text-xl mb-2"><%= field_name %></h3>
+                    <p class="text-gray-700 leading-relaxed"><%= sanitize(field["answers"].first) %></p>
+                  </div>
+                <% end %>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      <% elsif params[:option] == 'details' && @client.present? %>
+        <!-- Display client details -->
+        <div class="mt-6 mb-4">
+          <h2 class="text-2xl font-bold mb-4">Details for <%= @client.fullName %></h2>
+          <p><strong>DOB:</strong> <%= @client.DOB %> </p>
+        </div>
+      <% end %>
+    </turbo-frame>
+  </div>
+</div>
+
+<!-- Add a script to handle the dropdown -->
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const clientSelect = document.getElementById("client_select");
+    const addNoteBtn = document.getElementById("add_note_btn");
+    const caseDropdown = document.querySelector(".case-dropdown");
+    const caseSelect = document.getElementById("case_select");
+    const noteForm = document.querySelector(".note-form");
+    
+    addNoteBtn.addEventListener("click", function() {
+      // Fetch cases for the selected client and populate the dropdown
+      const clientId = clientSelect.value;
+      console.log(clientId)
+      if (clientId) {
+        fetch(`/fetch_cases?client_id=${clientId}`)
+          .then(response => response.json())
+          .then(data => {
+            console.log("Received data:", data);
+            let caseOptions = `<option value="">Select Case</option>`; // Add the placeholder
+            caseOptions += data.map(c => `<option value="${c.caseID}">${c.title}</option>`).join('');
+            console.log(caseOptions)
+            caseSelect.innerHTML = caseOptions;
+            caseDropdown.style.display = "block";
+            noteForm.style.display = "block"; // Show the treatment note form
+          });
+      }
+    });
+  });
+</script>
